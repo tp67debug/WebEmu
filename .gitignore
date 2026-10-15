@@ -1,0 +1,12 @@
+# Node modules & dependencies
+node_modules/
+npm-debug.log*
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Build outputs & local test logs
+build/
+dist/
+*.log
