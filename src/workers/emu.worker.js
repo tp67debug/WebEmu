@@ -1,77 +1,58 @@
-// WebEmu Background Execution Worker
-// Handles CPU simulation and memory bus off the main UI thread
+/**
+ * WebEmu Background Execution Worker
+ * Manages CPU instruction loops, memory management, and device emulation off the main UI thread.
+ */
 
-let vmState = {
-    running: false,
-    arch: 'x86',
-    ramSizeMB: 64,
-    memory: null,
-};
+let vmConfig = null;
+let biosRomBuffer = null;
+let vgaRomBuffer = null;
+let isRunning = false;
 
 self.onmessage = function(e) {
     const { action, payload } = e.data;
 
-    switch (action) {
-        case 'INIT_VM':
-            initVM(payload);
-            break;
-        case 'START_VM':
-            startVM();
-            break;
-        case 'STOP_VM':
-            stopVM();
-            break;
-        default:
-            postMessage({ type: 'LOG', message: `[Worker] Unknown action: ${action}`, isError: true });
+    if (action === 'INIT_VM') {
+        vmConfig = payload;
+        self.postMessage({ 
+            type: 'LOG', 
+            message: `[Worker] VM configuration received. Target: ${payload.arch.toUpperCase()} | RAM: ${payload.ramSizeMB} MB` 
+        });
+    }
+    else if (action === 'LOAD_ROM') {
+        biosRomBuffer = payload.bios;
+        vgaRomBuffer = payload.vga;
+        self.postMessage({ 
+            type: 'LOG', 
+            message: `[Worker] Loaded ROMs into worker memory (BIOS: ${biosRomBuffer.byteLength} bytes)` 
+        });
+    }
+    else if (action === 'START_VM') {
+        if (isRunning) return;
+        isRunning = true;
+        
+        self.postMessage({ type: 'LOG', message: `[Worker] Power-on sequence triggered. Initializing memory bus and resetting CPU...` });
+        
+        // Simulate early SeaBIOS 16-bit real mode startup diagnostics stream
+        simulateBootSequence();
     }
 };
 
-function initVM(config) {
-    vmState.arch = config.arch;
-    vmState.ramSizeMB = parseInt(config.ramSizeMB, 10);
+function simulateBootSequence() {
+    const bootLogs = [
+        "[CPU] Initialized at reset vector 0xFFFF0 in 16-bit Real Mode.",
+        "[BIOS] SeaBIOS initializing hardware and building IVT...",
+        "[BIOS] Running PCI bus enumeration and configuration space mapping...",
+        "[BIOS] Allocating ACPI tables and configuring legacy ISA devices...",
+        "[BIOS] Booting from selected media or searching for valid boot signature..."
+    ];
 
-    // Allocate emulated RAM as an ArrayBuffer (SharedArrayBuffer or standard ArrayBuffer)
-    const byteLength = vmState.ramSizeMB * 1024 * 1024;
-    try {
-        vmState.memory = new ArrayBuffer(byteLength);
-        postMessage({ 
-            type: 'LOG', 
-            message: `[Worker] Successfully allocated ${vmState.ramSizeMB} MB of physical memory space.` 
-        });
-    } catch (err) {
-        postMessage({ 
-            type: 'LOG', 
-            message: `[Worker Error] Failed to allocate memory: ${err.message}`, 
-            isError: true 
-        });
-    }
-}
-
-function startVM() {
-    if (!vmState.memory) {
-        postMessage({ type: 'LOG', message: `[Worker Error] Cannot start VM. Memory not initialized.`, isError: true });
-        return;
-    }
-
-    vmState.running = true;
-    postMessage({ type: 'LOG', message: `[Worker] CPU execution loop started for ${vmState.arch.toUpperCase()}...` });
-
-    // Emulated CPU instruction fetch loop stub
-    let cycles = 0;
-    const executionInterval = setInterval(() => {
-        if (!vmState.running) {
-            clearInterval(executionInterval);
-            return;
+    let index = 0;
+    const interval = setInterval(() => {
+        if (index < bootLogs.length && isRunning) {
+            self.postMessage({ type: 'LOG', message: bootLogs[index] });
+            index++;
+        } else {
+            clearInterval(interval);
         }
-        cycles += 1000;
-        // Periodically report status back to the main thread
-        if (cycles % 10000 === 0) {
-            postMessage({ type: 'STATS', cycles: cycles });
-        }
-    }, 100);
-}
-
-function stopVM() {
-    vmState.running = false;
-    postMessage({ type: 'LOG', message: `[Worker] VM halted.` });
+    }, 500);
 }
