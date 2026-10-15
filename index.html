@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebEmu - Client-Side Virtual Machine</title>
+    <link rel="icon" href="icon.ico" type="image/x-icon">
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --panel-bg: #161b22;
+            --border-color: #30363d;
+            --text-color: #c9d1d9;
+            --accent-color: #238636;
+            --accent-hover: #2ea043;
+            --terminal-bg: #000000;
+            --terminal-text: #00ff66;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 {
+            margin-bottom: 5px;
+            font-size: 1.8rem;
+        }
+
+        p.subtitle {
+            color: #8b949e;
+            margin-top: 0;
+            margin-bottom: 20px;
+            font-size: 0.95rem;
+        }
+
+        .container {
+            display: flex;
+            gap: 20px;
+            width: 100%;
+            max-width: 1100px;
+        }
+
+        .sidebar {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            width: 320px;
+            box-sizing: border-box;
+        }
+
+        .main-screen {
+            flex-grow: 1;
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            font-size: 0.85rem;
+            margin-bottom: 5px;
+            color: #8b949e;
+        }
+
+        select, input[type="number"], input[type="file"] {
+            width: 100%;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 8px;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-family: inherit;
+        }
+
+        button {
+            width: 100%;
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            font-family: inherit;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background-color: var(--accent-hover);
+        }
+
+        #terminal {
+            flex-grow: 1;
+            background-color: var(--terminal-bg);
+            color: var(--terminal-text);
+            font-family: "Courier New", Courier, monospace;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            line-height: 1.4;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>WebEmu</h1>
+    <p class="subtitle">Client-Side Multi-Architecture Virtual Machine Sandbox</p>
+
+    <div class="container">
+        <!-- Sidebar Controls -->
+        <div class="sidebar">
+            <div class="control-group">
+                <label for="arch-select">Architecture Target</label>
+                <select id="arch-select">
+                    <option value="x86">x86 (32-bit)</option>
+                    <option value="x64">x64 (64-bit)</option>
+                    <option value="arm64">ARM64 (Experimental)</option>
+                    <option value="ppc">PowerPC (Experimental)</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="firmware-mode">Boot Firmware</label>
+                <select id="firmware-mode">
+                    <option value="bios">Legacy BIOS (SeaBIOS)</option>
+                    <option value="uefi">UEFI (OVMF)</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="ram-size">System RAM (MB)</label>
+                <input type="number" id="ram-size" value="64" min="16" max="512">
+            </div>
+
+            <div class="control-group">
+                <label for="disk-file">Disk Image / ISO / Kernel</label>
+                <input type="file" id="disk-file">
+            </div>
+
+            <button onclick="bootWebEmu()">Power On VM</button>
+        </div>
+
+        <!-- Terminal / Screen Display -->
+        <div class="main-screen">
+            <label>Console Output (COM1 / VGA)</label>
+            <div id="terminal">WebEmu system initialized. Waiting for power-on...
+Ready to load BIOS, memory tables, and device bus.
+</div>
+        </div>
+    </div>
+
+    <script>
+        function logToTerminal(message, isError = false) {
+            const terminal = document.getElementById("terminal");
+            const colorStyle = isError ? 'color: #ff5555;' : '';
+            terminal.innerHTML += `<span style="${colorStyle}">${message}</span>\n`;
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        async function bootWebEmu() {
+            const arch = document.getElementById("arch-select").value;
+            const firmware = document.getElementById("firmware-mode").value;
+            const ram = document.getElementById("ram-size").value;
+            const fileInput = document.getElementById("disk-file").files[0];
+
+            logToTerminal(`\n[Power On] Initializing WebEmu instance...`);
+            logToTerminal(`> Target Architecture: ${arch.toUpperCase()}`);
+            logToTerminal(`> Firmware Mode: ${firmware.toUpperCase()}`);
+            logToTerminal(`> Allocated RAM: ${ram} MB`);
+
+            if (fileInput) {
+                logToTerminal(`> Attached Media: ${fileInput.name} (${(fileInput.size / 1024 / 1024).toFixed(2)} MB)`);
+            } else {
+                logToTerminal(`> Warning: No boot disk or kernel image attached.`, true);
+            }
+
+            try {
+                logToTerminal(`> Fetching ROM binaries from /bios/...`);
+                
+                const [seabios, vgabios] = await Promise.all([
+                    fetch('./bios/seabios.bin').then(res => {
+                        if (!res.ok) throw new Error("seabios.bin missing from /bios/ directory");
+                        return res.arrayBuffer();
+                    }),
+                    fetch('./bios/vgabios.bin').then(res => {
+                        if (!res.ok) throw new Error("vgabios.bin missing from /bios/ directory");
+                        return res.arrayBuffer();
+                    })
+                ]);
+
+                logToTerminal(`> SeaBIOS loaded successfully (${seabios.byteLength} bytes).`);
+                logToTerminal(`> VGA BIOS loaded successfully (${vgabios.byteLength} bytes).`);
+                logToTerminal(`> Handing over execution to WebAssembly Core...`);
+
+            } catch (err) {
+                logToTerminal(`[Error] ${err.message}`, true);
+                logToTerminal(`[Hint] Make sure you have created a /bios/ folder with seabios.bin and vgabios.bin.`, true);
+            }
+        }
+    </script>
+
+</body>
+</html>
