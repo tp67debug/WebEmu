@@ -77,6 +77,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 payload: { arch, ramSizeMB: ram }
             });
 
+            // Send fetched BIOS and VGA binaries to the worker (with zero-copy transfer)
+            emuWorker.postMessage({
+                action: 'LOAD_ROM',
+                payload: {
+                    bios: biosData,
+                    vga: vgaData
+                },
+                transfer: [biosData, vgaData]
+            });
+
             emuWorker.postMessage({
                 action: 'START_VM'
             });
