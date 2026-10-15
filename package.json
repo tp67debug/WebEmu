@@ -1,0 +1,18 @@
+{
+  "name": "webemu",
+  "version": "1.0.0",
+  "description": "Client-Side Multi-Architecture Virtual Machine Sandbox",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx http-server -p 8080 --cors"
+  },
+  "keywords": [
+    "emulator",
+    "wasm",
+    "virtual-machine",
+    "x86",
+    "browser-emulator"
+  ],
+  "license": "MIT",
+  "dependencies": {}
+}
