@@ -52,13 +52,14 @@ document.addEventListener('DOMContentLoaded', () => {
             terminal.writeln(`> Firmware loaded: ${biosFilename} (${biosData.byteLength} bytes)`);
             terminal.writeln(`> VGA BIOS loaded: ${vgaFilename} (${vgaData.byteLength} bytes)`);
 
-            // Terminate existing worker if running
+// Terminate existing worker if running
             if (emuWorker) {
                 emuWorker.terminate();
             }
 
-            // Spawn background execution worker
-            emuWorker = new Worker('./src/worker/emu.worker.js');
+            // Spawn background execution worker dynamically using import.meta.url
+            const workerUrl = new URL('../worker/emu.worker.js', import.meta.url);
+            emuWorker = new Worker(workerUrl, { type: 'module' });
 
             emuWorker.onmessage = function(e) {
                 const { type, message, isError } = e.data;
