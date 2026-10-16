@@ -58,8 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // Spawn background execution worker dynamically using import.meta.url
-            const workerUrl = new URL('../worker/emu.worker.js', import.meta.url);
-            emuWorker = new Worker(workerUrl, { type: 'module' });
+emuWorker = new Worker('./src/worker/emu.worker.js');
 
             emuWorker.onmessage = function(e) {
                 const { type, message, isError } = e.data;
