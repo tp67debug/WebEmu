@@ -1,99 +1,75 @@
-/**
- * WebEmu Frontend Application Controller
- * Coordinates UI inputs, Web Worker execution, terminal logging, and ROM loading.
- */
+// src/ui/app.js
+
+let emuWorker = null;
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Initialize UI wrappers
-    const terminal = new EmulatorTerminal('terminal');
-    const storage = new EmulatorStorage();
-    let emuWorker = null;
-
-    terminal.writeln("WebEmu system initialized.");
-    terminal.writeln("Ready to load BIOS, memory tables, and device bus.");
-
-    // Expose boot function globally so index.html button can trigger it
-    window.bootWebEmu = async function() {
-        const arch = document.getElementById("arch-select").value;
-        const firmware = document.getElementById("firmware-mode").value;
-        const ram = document.getElementById("ram-size").value;
-        const fileInput = document.getElementById("disk-file").files[0];
-
-        terminal.clear();
-        terminal.writeln(`[Power On] Initializing WebEmu instance...`);
-        terminal.writeln(`> Target Architecture: ${arch.toUpperCase()}`);
-        terminal.writeln(`> Firmware Mode: ${firmware.toUpperCase()}`);
-        terminal.writeln(`> Allocated RAM: ${ram} MB`);
-
-        if (fileInput) {
-            terminal.writeln(`> Attached Media: ${fileInput.name} (${(fileInput.size / 1024 / 1024).toFixed(2)} MB)`);
-        } else {
-            terminal.writeln(`> Warning: No boot disk or kernel image attached.`);
-        }
-
-        try {
-            terminal.writeln(`> Fetching ROM binaries from /bios/...`);
-            
-            // Select appropriate ROM files based on firmware choice
-            const biosFilename = firmware === 'uefi' ? 'bochs-bios.bin' : 'seabios.bin';
-            const vgaFilename = firmware === 'uefi' ? 'bochs-vgabios.bin' : 'vgabios.bin';
-
-            const [biosData, vgaData] = await Promise.all([
-                fetch(`./bios/${biosFilename}`).then(res => {
-                    if (!res.ok) throw new Error(`${biosFilename} missing from /bios/ directory`);
-                    return res.arrayBuffer();
-                }),
-                fetch(`./bios/${vgaFilename}`).then(res => {
-                    if (!res.ok) throw new Error(`${vgaFilename} missing from /bios/ directory`);
-                    return res.arrayBuffer();
-                })
-            ]);
-
-            terminal.writeln(`> Firmware loaded: ${biosFilename} (${biosData.byteLength} bytes)`);
-            terminal.writeln(`> VGA BIOS loaded: ${vgaFilename} (${vgaData.byteLength} bytes)`);
-
-// Terminate existing worker if running
-            if (emuWorker) {
-                emuWorker.terminate();
-            }
-
-            // Spawn background execution worker dynamically using import.meta.url
-emuWorker = new Worker('./src/worker/emu.worker.js', { type: 'module' });
-
-            emuWorker.onmessage = function(e) {
-                const { type, message, isError } = e.data;
-                if (type === 'LOG') {
-                    if (isError) {
-                        terminal.writeln(`[Error] ${message}`);
-                    } else {
-                        terminal.writeln(message);
-                    }
-                }
-            };
-
-            // Initialize and start VM inside the worker thread
-            emuWorker.postMessage({
-                action: 'INIT_VM',
-                payload: { arch, ramSizeMB: ram }
-            });
-
-            // Send fetched BIOS and VGA binaries to the worker (with zero-copy transfer)
-            emuWorker.postMessage({
-                action: 'LOAD_ROM',
-                payload: {
-                    bios: biosData,
-                    vga: vgaData
-                },
-                transfer: [biosData, vgaData]
-            });
-
-            emuWorker.postMessage({
-                action: 'START_VM'
-            });
-
-        } catch (err) {
-            terminal.writeln(`[Error] ${err.message}`);
-            terminal.writeln(`[Hint] Ensure your ROM binaries are placed inside the /bios/ folder.`);
-        }
-    };
+    const powerButton = document.getElementById('power-on-btn'); // Adjust ID to match your actual HTML button ID
+    
+    if (powerButton) {
+        powerButton.addEventListener('click', startEmulation);
+    }
 });
+
+async function startEmulation() {
+    try {
+        terminal.writeln("[Power On] Initializing WebEmu instance...");
+        terminal.writeln("> Target Architecture: X86_64");
+        terminal.writeln("> Firmware Mode: BIOS");
+        terminal.writeln("> Allocated RAM: 128 MB");
+
+        // 1. Fetch ROMs and Media (update paths if your folder structure differs)
+        terminal.writeln("> Fetching ROM binaries from /bios/...");
+        
+        const [biosRes, vgaRes] = await Promise.all([
+            fetch('./bios/seabios.bin'),
+            fetch('./bios/vgabios.bin')
+        ]);
+
+        if (!biosRes.ok || !vgaRes.ok) {
+            throw new Error("Failed to fetch BIOS ROM binaries. Check /bios/ folder.");
+        }
+
+        const biosBuffer = await biosRes.arrayBuffer();
+        const vgaBiosBuffer = await vgaRes.arrayBuffer();
+
+        terminal.writeln(`> Firmware loaded: seabios.bin (${biosBuffer.byteLength} bytes)`);
+        terminal.writeln(`> VGA BIOS loaded: vgabios.bin (${vgaBiosBuffer.byteLength} bytes)`);
+
+        // 2. Clean up existing worker if any
+        if (emuWorker) {
+            emuWorker.terminate();
+        }
+
+        // 3. Spawn the Web Worker safely without import.meta errors
+        terminal.writeln("> Handing over execution to WebAssembly Core..");
+        
+        emuWorker = new Worker('./src/worker/emu.worker.js');
+
+        emuWorker.onmessage = function(e) {
+            const { type, message, isError } = e.data;
+            if (type === 'LOG') {
+                if (isError) {
+                    terminal.writeln(`[Error] ${message}`);
+                } else {
+                    terminal.writeln(message);
+                }
+            }
+        };
+
+        emuWorker.onerror = function(err) {
+            terminal.writeln(`[Worker Error] ${err.message}`);
+            console.error("Worker error:", err);
+        };
+
+        // 4. Send boot payload to worker
+        emuWorker.postMessage({
+            type: 'BOOT',
+            bios: biosBuffer,
+            vgaBios: vgaBiosBuffer
+        }, [biosBuffer, vgaBiosBuffer]);
+
+    } catch (err) {
+        terminal.writeln(`[Fatal Error] ${err.message}`);
+        console.error(err);
+    }
+}
